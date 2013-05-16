@@ -1,0 +1,16 @@
+<package>
+  <description brief="robolink">
+
+     robolink
+
+  </description>
+  <author>Ty Tremblay</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/robolink</url>
+  <depend package="EposManager"/>
+  <depend package="geometry_msgs"/>
+
+</package>
+
+

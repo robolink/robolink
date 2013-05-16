@@ -1,0 +1,6 @@
+<launch>    
+		        
+        <node name="PoseGeneration" pkg="robolink" type="PoseGeneration.py" output="screen" >
+        </node>
+        
+</launch>

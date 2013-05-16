@@ -1,0 +1,6 @@
+<launch> 
+		        
+        <node name="XboxControl" pkg="robolink" type="XboxControl.py" output="screen" >
+        </node>
+        
+</launch>

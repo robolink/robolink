@@ -1,0 +1,13 @@
+<launch>
+        <rosparam command="load" file="$(find robolink)/params/Joint_0.yaml" ns="motors/Joint_0" />
+        <rosparam command="load" file="$(find robolink)/params/Joint_1.yaml" ns="motors/Joint_1" />
+	<rosparam command="load" file="$(find robolink)/params/Joint_2.yaml" ns="motors/Joint_2" />
+	<rosparam command="load" file="$(find robolink)/params/Joint_3.yaml" ns="motors/Joint_3" />
+	<rosparam command="load" file="$(find robolink)/params/Joint_4.yaml" ns="motors/Joint_4" />
+
+        <node name="NewEpos" pkg="EposManager" type="EposManager"  ns="motors" output="screen" args="Joint_0 Joint_1" >
+                <param name="Protocol" value="USB" />
+                <param name="Port" value="USB0" />
+                <param name="Publish_Rate" value="10" />
+        </node>
+</launch>
