@@ -1,0 +1,7 @@
+<launch>    
+		        
+        <node name="EndEffectorXYPlane" pkg="robolink" type="EndEffectorXYPlane.py" output="screen" >
+        
+        </node>
+        
+</launch>

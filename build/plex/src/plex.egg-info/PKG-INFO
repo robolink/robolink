@@ -1,0 +1,12 @@
+Metadata-Version: 1.0
+Name: plex
+Version: 2.0.0dev
+Summary: Plex is a library building lexical analysers
+Home-page: http://www.cosc.canterbury.ac.nz/greg.ewing/python/Plex/
+Author: Stephane Klein
+Author-email: stephane@harobed.org
+License: LGPL
+Description: 
+        
+        
+Platform: UNKNOWN
