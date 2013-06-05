@@ -1,0 +1,7 @@
+<launch>    
+		        
+        <node name="TestingMovementViaJS" pkg="robolink" type="TestingMovementViaJS.py" output="screen" >
+        
+        </node>
+        
+</launch>
