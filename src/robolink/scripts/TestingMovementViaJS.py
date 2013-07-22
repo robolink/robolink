@@ -64,7 +64,7 @@ def joyCallback(Joy):
     # - on release, move button back to initial position
     
     #log debuggggggg
-    if Abutton:
+    if Abutton: 
         desiredPose.header.stamp = now
         desiredPose.pose.position.x = (Abutton*-stepSize)
         desiredPose.pose.position.y = 0
