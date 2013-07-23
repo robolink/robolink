@@ -18,9 +18,19 @@ from robolink.classes import robolinkJoint
 
 desiredPose = RobolinkControl()
 currentPose = RobolinkInfo()
+METHOD_SUB_MAP_POS = ['position.x','position.y','position.z']
+METHOD_SUB_MAP_OR = ['orientation.x','orientation.y','orientation.z','orientation.w']
+METHOD_SUB_MAP = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
+
+#super useful
+def rec_getattr(obj, attr):
+    return reduce(getattr, attr.split("."), obj)
+def rec_setattr(obj, attr, value):
+    attrs = attr.split(".")
+    setattr(reduce(getattr, attrs[:-1], obj), attrs[-1], value)
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.1, reset=True, startingstep=0, steps=[]):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.1, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS):
         """ ARGS: 
         
             position:     List; of positions
@@ -41,7 +51,9 @@ class CommandMessage(object):
             runback     : Runs only backward steps (needs reset=True)
             execstep    : executes a particular step
         """
-        
+        self.controller = controller
+        self.method = method
+        self.method_sub_map = method_sub_map
         if positions and timeinterval:
             if len(timeinterval) != len(positions):
                 raise Exception("Length of Position and Timeinterval must be same")
@@ -119,6 +131,8 @@ class CommandMessage(object):
         thisstep = step or self.currentstep
         try:
             ### TODO: IDEALLY here we actually do something with the arm. 
+            for i,j in zip(positions[thisstep],self.method_sub_map) :
+                rec_setattr(self.controller,self.method+j,i)
             print positions[thisstep],
             print thisstep,
             print timeintervals[thisstep]
