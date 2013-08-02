@@ -19,6 +19,8 @@ from robolink.classes import robolinkJoint
 
 desiredPose = RobolinkControl()
 currentPose = RobolinkInfo()
+desiredPosePublisher = rospy.Publisher('Robolink_Control', RobolinkControl)
+
 METHOD_SUB_MAP_POS = ['position.x','position.y','position.z']
 METHOD_SUB_MAP_OR = ['orientation.x','orientation.y','orientation.z','orientation.w']
 METHOD_SUB_MAP = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
@@ -29,9 +31,11 @@ def rec_getattr(obj, attr):
 def rec_setattr(obj, attr, value):
     attrs = attr.split(".")
     setattr(reduce(getattr, attrs[:-1], obj), attrs[-1], value)
+def negate(l):
+    return [-x for x in l]
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.1, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS):
         """ ARGS: 
         
             position:     List; of positions
@@ -81,8 +85,8 @@ class CommandMessage(object):
         # important later
         self.startingstep = startingstep
         self.currentstep = self.startingstep
-        self.fwdruncnt = 0
-        self.backruncnt = 0
+        self.runcnt_fwd = 0
+        self.runcnt_back = 0
         
         # can skip certain positions and repeat others. Ball Wildly
         if steps:
@@ -98,14 +102,14 @@ class CommandMessage(object):
         if self.reset:
             self.initial = currentPose.current_position.position
             # if reversed, we need to reverse our positions and tack them onto themselves minus the last one.
-            self.backpositions = list(reversed(self.positions))
+            self.backpositions = list(reversed([negate(x) for x in self.positions]))
             self.backtimeintervals = list(reversed(self.timeinterval))
             
             self.fwdpositions = self.positions
             self.fwdtimeintervals = self.timeinterval
             
-            self.positions = self.fwdpositions + self.backpositions[1:]
-            self.timeinterval = self.fwdtimeintervals + self.backtimeintervals[1:]
+            self.positions = self.fwdpositions + self.backpositions
+            self.timeinterval = self.fwdtimeintervals + self.backtimeintervals
         #
         self.done = False
             
@@ -120,12 +124,12 @@ class CommandMessage(object):
         
     def runfwd(self):
         self.run(ov_pos=self.fwdpositions,ov_time=self.fwdtimeintervals)
-        self.fwdruncnt += 1
+        self.runcnt_fwd += 1
         
     def runback(self):
         if self.reset == True:
             self.run(ov_pos=self.backpositions,ov_time=self.backtimeintervals)
-            self.backruncnt +=1
+            self.runcnt_back +=1
         else:
             raise Exception("Can't just run back if not initialized w/ reset. What do you think we are?")
                 
@@ -136,13 +140,39 @@ class CommandMessage(object):
         thisstep = step or self.currentstep
         try:
             ### TODO: IDEALLY here we actually do something with the arm. 
+            now = rospy.Time.now()
+
             for i,j in zip(positions[thisstep],self.method_sub_map) :
                 rec_setattr(self.controller,self.method+j,i)
             print positions[thisstep],
             print thisstep,
-            print timeintervals[thisstep]
+            rospy.sleep(timeintervals[thisstep])
+            #print self.controller
+            desiredPosePublisher.publish(self.buildControlMsg())
         except IndexError:
             print "Bad Step, Doesn't Exist"
+            
+    def should_reset(self):
+        if self.runcnt_fwd > self.runcnt_back:
+            return True
+        else:
+            return False
+    def buildControlMsg(self):
+        '''
+        Takes in a RobolinkControl() message and an array of jointVelocities and builds a message
+        '''
+        robolinkControlMsg = self.controller
+        
+        #Build the header
+        now = rospy.Time.now()
+        robolinkControlMsg.header.frame_id = 'gripper'
+        robolinkControlMsg.header.stamp = now
+        
+        #Set the control mode
+        robolinkControlMsg.control_mode = robolinkControlMsg.POSE_CONTROL
+        
+        print robolinkControlMsg
+        return robolinkControlMsg
             
             
 class CommandAcceptor(object):
@@ -194,19 +224,30 @@ class CommandAcceptor(object):
 def initialize():
     global cmdacceptor
     cmddict = {
-        'fwd':CommandMessage(positions=[(0,1,2),(1,2,3)]), 
-        'back':CommandMessage(positions=[(0,-1,-2),(-1,-2,-3)])
+        'none':CommandMessage(  positions=[(0.0,0,0),    (0.0,0,0)]), 
+        #'fwd':CommandMessage(   positions=[(0.05,0,0),   (0.1,0,0)]), 
+        'fwd':CommandMessage(   positions=[(0.05,0,0),]), 
+        #'back':CommandMessage(  positions=[(-0.05,0,0),  (-0.1,0,0)]),
+        'back':CommandMessage(  positions=[(-0.05,0,0)]),
+        'left':CommandMessage(  positions=[(0,.025,0),   (0,.5,0)]),
+        'right':CommandMessage( positions=[(0,-.025,0),  (0,-0.5,0)]),
+        
         }
     cmdacceptor = CommandAcceptor(cmddict)
     return cmddict.keys()
     
 def cmdCallback(string):
     print "Running Commmand: '%s'" % string.data
-    if cmdacceptor.currentcmd:
-        if cmdacceptor.can_reset():
+    cmdstr = string.data
+    if cmdstr == "stop":        
+        if cmdacceptor.can_reset() and cmdacceptor.currentcmd.should_reset():
             cmdacceptor.reset()
+    else:
+        if cmdacceptor.currentcmd:
+            if cmdacceptor.currentcmd.should_reset():
+                cmdacceptor.reset()
         
-    cmdacceptor.run(string.data)
+        cmdacceptor.run(string.data)
     #print cmdacceptor.currentcmd
     
 if __name__ == '__main__':
@@ -216,11 +257,11 @@ if __name__ == '__main__':
         keys = initialize()      
         rospy.Subscriber("cmdacceptor", String, cmdCallback)
         #rospy.Timer(rospy.Duration(0.1), publishDesiredPoseCallback)
-        print "CommandAcceptor Initialized with commands: %s" % ",".join(k for k in keys)
+        print "CommandAcceptor Initialized with commands: %s,stop" % ",".join(k for k in keys)
         rospy.spin()
     except rospy.ROSInterruptException:
         raise
     
     finally:
         pass
-        #setAllVelocities(0,0,0,0,0)
+            #setAllVelocities(0,0,0,0,0)
