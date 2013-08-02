@@ -23,6 +23,7 @@ desiredPosePublisher = rospy.Publisher('Robolink_Control', RobolinkControl)
 
 METHOD_SUB_MAP_POS = ['position.x','position.y','position.z']
 METHOD_SUB_MAP_OR = ['orientation.x','orientation.y','orientation.z','orientation.w']
+METHOD_SUB_MAP_JOINTS = ['joint_0','joint_1','joint_2','joint_3','joint_4'],
 METHOD_SUB_MAP = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
 
 #super useful
@@ -57,7 +58,8 @@ class CommandMessage(object):
             execstep    : executes a particular step
         """
         self.controller = controller
-        self.method = method
+        #       if we're interfacing stuff at the top level we'll input method = None
+        self.method = method or "" 
         self.method_sub_map = method_sub_map
         if positions and timeinterval:
             if len(timeinterval) != len(positions):
