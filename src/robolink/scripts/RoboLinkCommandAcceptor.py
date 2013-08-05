@@ -20,12 +20,32 @@ from robolink.classes import robolinkJoint
 desiredPose = RobolinkControl()
 currentPose = RobolinkInfo()
 desiredPosePublisher = rospy.Publisher('Robolink_Control', RobolinkControl)
+### Methods
+METHOD_POSE  = "pose."
+METHOD_TWIST = "twist."
+METHOD_JOINT = None
+###Method Sub Maps
 
+#pose
 METHOD_SUB_MAP_POS = ['position.x','position.y','position.z']
 METHOD_SUB_MAP_OR = ['orientation.x','orientation.y','orientation.z','orientation.w']
-METHOD_SUB_MAP_JOINTS = ['joint_0','joint_1','joint_2','joint_3','joint_4'],
-METHOD_SUB_MAP = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
+#twist
+METHOD_SUB_MAP_LINEAR = ['linear.x','linear.y','linear.z']
+METHOD_SUB_MAP_ANGULAR = ['angular.x','angular.y','angular.z']
+#None
+METHOD_SUB_MAP_JOINTS = ['joint_0_setpoint','joint_1_setpoint','joint_2_setpoint','joint_3_setpoint','joint_4_setpoint'],
 
+METHOD_SUB_MAP_POSE = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
+METHOD_SUB_MAP_TWIST = METHOD_SUB_MAP_LINEAR + METHOD_SUB_MAP_ANGULAR
+
+
+# control_modes (pulled out of robolink control msg)
+JOINT_VELOCITY = 1
+JOINT_ABSOLUTE_POSITION = 2
+JOINT_RELATIVE_POSITION = 3
+POSE_CONTROL = 4
+TWIST_CONTROL = 5
+    
 #super useful
 def rec_getattr(obj, attr):
     return reduce(getattr, attr.split("."), obj)
@@ -36,7 +56,7 @@ def negate(l):
     return [-x for x in l]
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
         """ ARGS: 
         
             position:     List; of positions
@@ -45,6 +65,7 @@ class CommandMessage(object):
             reset:        Bool; --go back to where when started (useful for driving, less for controlling light switches)
             startingstep: Int ; --Have a list of positions where you want to start after the initial for some reason? This is your fave thing
             steps:        List; of indices --Have a list of positions that only needs the 3rd and 5th steps? This thing is balling
+            control_mode: INT;  -- defualts to pose. If your method_sub_map isn't a standard type you should probably change this.
             
             NOTE:
             if you're giving a position AND timeinterval, they MUST be the same length
@@ -56,8 +77,22 @@ class CommandMessage(object):
             runfwd      : Runs only forward steps
             runback     : Runs only backward steps (needs reset=True)
             execstep    : executes a particular step
+            
+            ### examples:
+            # standard control
+            CommandMessage(poslist)
+            # joint control
+            CommandMessage(poslist,method=None, method_sub_map=METHOD_SUB_MAP_JOINTS, control_mode=JOINT_VELOCITY)
         """
         self.controller = controller
+        self.control_mode = control_mode
+        if self.control_mode == 4:
+            self.control_frame == "gripper"
+            
+        else:
+            self.control_frame = None
+            
+            
         #       if we're interfacing stuff at the top level we'll input method = None
         self.method = method or "" 
         self.method_sub_map = method_sub_map
@@ -167,11 +202,12 @@ class CommandMessage(object):
         
         #Build the header
         now = rospy.Time.now()
-        robolinkControlMsg.header.frame_id = 'gripper'
+        if self.control_frame:
+            robolinkControlMsg.header.frame_id = self.control_frame:
         robolinkControlMsg.header.stamp = now
         
         #Set the control mode
-        robolinkControlMsg.control_mode = robolinkControlMsg.POSE_CONTROL
+        robolinkControlMsg.control_mode = self.control_mode
         
         print robolinkControlMsg
         return robolinkControlMsg
@@ -228,7 +264,7 @@ def initialize():
     cmddict = {
         'none':CommandMessage(  positions=[(0.0,0,0),    (0.0,0,0)]), 
         #'fwd':CommandMessage(   positions=[(0.05,0,0),   (0.1,0,0)]), 
-        'fwd':CommandMessage(   positions=[(0.05,0,0),]), 
+            'fwd':CommandMessage(   positions=[(0.05,0,0),]), 
         #'back':CommandMessage(  positions=[(-0.05,0,0),  (-0.1,0,0)]),
         'back':CommandMessage(  positions=[(-0.05,0,0)]),
         'left':CommandMessage(  positions=[(0,.025,0),   (0,.5,0)]),
@@ -266,4 +302,4 @@ if __name__ == '__main__':
     
     finally:
         pass
-            #setAllVelocities(0,0,0,0,0)
+            #setAllVelocities(0,0,0,0,0)                 
