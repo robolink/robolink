@@ -33,7 +33,7 @@ METHOD_SUB_MAP_OR = ['orientation.x','orientation.y','orientation.z','orientatio
 METHOD_SUB_MAP_LINEAR = ['linear.x','linear.y','linear.z']
 METHOD_SUB_MAP_ANGULAR = ['angular.x','angular.y','angular.z']
 #None
-METHOD_SUB_MAP_JOINTS = ['joint_0_setpoint','joint_1_setpoint','joint_2_setpoint','joint_3_setpoint','joint_4_setpoint'],
+METHOD_SUB_MAP_JOINTS = ['joint_0_setpoint','joint_1_setpoint','joint_2_setpoint','joint_3_setpoint','joint_4_setpoint']
 
 METHOD_SUB_MAP_POSE = METHOD_SUB_MAP_POS + METHOD_SUB_MAP_OR
 METHOD_SUB_MAP_TWIST = METHOD_SUB_MAP_LINEAR + METHOD_SUB_MAP_ANGULAR
@@ -56,7 +56,7 @@ def negate(l):
     return [-x for x in l]
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPosePublisher, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
         """ ARGS: 
         
             position:     List; of positions
@@ -87,10 +87,11 @@ class CommandMessage(object):
         self.controller = controller
         self.control_mode = control_mode
         if self.control_mode == 4:
-            self.control_frame == "gripper"
+            self.control_frame = "gripper"
             
         else:
-            self.control_frame = None
+            self.control_frame = "baseFrame"
+        self.control_frame = None
             
             
         #       if we're interfacing stuff at the top level we'll input method = None
@@ -180,12 +181,13 @@ class CommandMessage(object):
             now = rospy.Time.now()
 
             for i,j in zip(positions[thisstep],self.method_sub_map) :
-                rec_setattr(self.controller,self.method+j,i)
-            print positions[thisstep],
-            print thisstep,
+               rec_setattr(self.controller,self.method+j,i)
+            #print positions[thisstep],
+            #print thisstep,
+            print self.buildControlMsg()
             rospy.sleep(timeintervals[thisstep])
             #print self.controller
-            desiredPosePublisher.publish(self.buildControlMsg())
+            self.controller.publish(self.buildControlMsg())
         except IndexError:
             print "Bad Step, Doesn't Exist"
             
@@ -203,13 +205,12 @@ class CommandMessage(object):
         #Build the header
         now = rospy.Time.now()
         if self.control_frame:
-            robolinkControlMsg.header.frame_id = self.control_frame:
+            robolinkControlMsg.header.frame_id = self.control_frame
         robolinkControlMsg.header.stamp = now
         
         #Set the control mode
         robolinkControlMsg.control_mode = self.control_mode
         
-        print robolinkControlMsg
         return robolinkControlMsg
             
             
@@ -269,6 +270,9 @@ def initialize():
         'back':CommandMessage(  positions=[(-0.05,0,0)]),
         'left':CommandMessage(  positions=[(0,.025,0),   (0,.5,0)]),
         'right':CommandMessage( positions=[(0,-.025,0),  (0,-0.5,0)]),
+        
+        'reset': CommandMessage( positions = [(0,0,0,0,0),],method=None,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_RELATIVE_POSITION),
+        'five': CommandMessage( positions = [(5,5,5,5,5),(3,3,3,3,3)],method=None,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_RELATIVE_POSITION)
         
         }
     cmdacceptor = CommandAcceptor(cmddict)
