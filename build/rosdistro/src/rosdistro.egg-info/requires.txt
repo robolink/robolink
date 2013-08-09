@@ -1,0 +1,5 @@
+argparse
+catkin_pkg
+distribute
+rospkg
+PyYAML

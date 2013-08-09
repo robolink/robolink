@@ -516,6 +516,7 @@ def setAllAbsolutePositions(joint0_pos, joint1_pos, joint2_pos, joint3_pos, join
     GroupMsg = GroupEPOSControl()
     
     #A global array to store all of the motor absolute positions
+    global absolutePositionSetpoints
     absolutePositionSetpoints = array('l', [joint0_pos, joint1_pos, joint2_pos, joint3_pos, joint4_pos])
     
     for i in range(len(jointList)):
@@ -536,8 +537,8 @@ def setAllRelativePositions(joint0_pos, joint1_pos, joint2_pos, joint3_pos, join
     GroupMsg = GroupEPOSControl()
     
     for i in range(len(jointList)):
-        jointList[i].controlMsg.control_mode = EPOSControl.ABSOLUTE_POSITION_IMMEDIATE
-        jointList[i].controlMsg.setpoint = absolutePositionSetpoints[i]
+        jointList[i].controlMsg.control_mode = EPOSControl.RELATIVE_POSITION_IMMEDIATE
+        jointList[i].controlMsg.setpoint = relativePositionSetpoints[i]
         GroupMsg.motor_group.append(jointList[i].controlMsg)
         
     #Publish the message             

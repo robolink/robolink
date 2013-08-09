@@ -1,0 +1,4 @@
+catkin_pkg
+rospkg
+rosdistro >= 0.2.1
+PyYAML >= 3.1

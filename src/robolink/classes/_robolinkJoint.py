@@ -10,7 +10,7 @@ from EposManager.msg import IOControl
 
 #Create a class for a robolink joint
 class robolinkJoint(object):
-    maxAbsVelocity = 1000.0  #motor max is 3000
+    maxAbsVelocity = 500.0  #motor max is 3000
     encoderResolution = 2048.0  #512cpr quadrature encoder
     Reduction = 318.0 #318:1 planetary reduction
     encoderCountsPerPulleyDegree = encoderResolution * Reduction/360.0

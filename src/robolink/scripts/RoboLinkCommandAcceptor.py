@@ -25,6 +25,7 @@ METHOD_POSE  = "pose."
 METHOD_TWIST = "twist."
 METHOD_JOINT = None
 ###Method Sub Maps
+MULT = 50
 
 #pose
 METHOD_SUB_MAP_POS = ['position.x','position.y','position.z']
@@ -45,6 +46,8 @@ JOINT_ABSOLUTE_POSITION = 2
 JOINT_RELATIVE_POSITION = 3
 POSE_CONTROL = 4
 TWIST_CONTROL = 5
+
+global current_info
     
 #super useful
 def rec_getattr(obj, attr):
@@ -56,7 +59,7 @@ def negate(l):
     return [-x for x in l]
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPosePublisher, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
         """ ARGS: 
         
             position:     List; of positions
@@ -171,25 +174,49 @@ class CommandMessage(object):
         else:
             raise Exception("Can't just run back if not initialized w/ reset. What do you think we are?")
                 
+    #def execstep(self,step=None,ov_pos=None,ov_time=None):
+        ##other is a tuple composed of (positions,timeintervals)
+        #positions = ov_pos or self.positions
+        #timeintervals = ov_time or self.timeinterval
+        #thisstep = step or self.currentstep
+        #try:
+            #### TODO: IDEALLY here we actually do something with the arm. 
+            #now = rospy.Time.now()
+
+            #for i,j in zip(positions[thisstep],self.method_sub_map) :
+               #rec_setattr(self.controller,self.method+j,i)
+            ##print positions[thisstep],
+            ##print thisstep,
+            #print self.buildControlMsg()
+            #rospy.sleep(timeintervals[thisstep])
+            ##print self.controller
+            #self.controller.publish(self.buildControlMsg())
+        #except IndexError:
+            #print "Bad Step, Doesn't Exist"
     def execstep(self,step=None,ov_pos=None,ov_time=None):
-        #other is a tuple composed of (positions,timeintervals)
         positions = ov_pos or self.positions
         timeintervals = ov_time or self.timeinterval
         thisstep = step or self.currentstep
-        try:
-            ### TODO: IDEALLY here we actually do something with the arm. 
-            now = rospy.Time.now()
-
-            for i,j in zip(positions[thisstep],self.method_sub_map) :
-               rec_setattr(self.controller,self.method+j,i)
-            #print positions[thisstep],
-            #print thisstep,
-            print self.buildControlMsg()
-            rospy.sleep(timeintervals[thisstep])
-            #print self.controller
-            self.controller.publish(self.buildControlMsg())
-        except IndexError:
-            print "Bad Step, Doesn't Exist"
+        print current_info
+        print positions[thisstep]
+        while list(current_info) != list(positions[thisstep]):
+            print "moving"
+            print current_info
+            print positions[thisstep]
+            for desired,method,current in zip(positions[thisstep],self.method_sub_map,current_info):
+                minimult = (desired-current)/20
+                #print "mm: " + str(minimult)
+                if desired > current:
+                    movement = 1 * MULT * (abs(minimult) +1 )
+                elif desired < current:
+                    movement = -1 * MULT * (abs(minimult) +1 )
+                else:
+                    movement = 0
+                #print desired,method,current,movement
+                rec_setattr(self.controller,self.method+method,movement)
+            #print self.buildControlMsg()
+            desiredPosePublisher.publish(self.buildControlMsg())
+        print "reached"
             
     def should_reset(self):
         if self.runcnt_fwd > self.runcnt_back:
@@ -201,6 +228,9 @@ class CommandMessage(object):
         Takes in a RobolinkControl() message and an array of jointVelocities and builds a message
         '''
         robolinkControlMsg = self.controller
+        #print dir(self.controller)
+        #robolinkControlMsg = RobolinkControl()
+        #print dir(robolinkControlMsg)
         
         #Build the header
         now = rospy.Time.now()
@@ -261,23 +291,36 @@ class CommandAcceptor(object):
             pass
 ### initialize the commandacceptor object
 def initialize():
+    
     global cmdacceptor
     cmddict = {
-        'none':CommandMessage(  positions=[(0.0,0,0),    (0.0,0,0)]), 
+        #'none':CommandMessage(  positions=[(0.0,0,0),    (0.0,0,0)]), 
         #'fwd':CommandMessage(   positions=[(0.05,0,0),   (0.1,0,0)]), 
-            'fwd':CommandMessage(   positions=[(0.05,0,0),]), 
+            #'fwd':CommandMessage(   positions=[(0.05,0,0),]), 
         #'back':CommandMessage(  positions=[(-0.05,0,0),  (-0.1,0,0)]),
-        'back':CommandMessage(  positions=[(-0.05,0,0)]),
-        'left':CommandMessage(  positions=[(0,.025,0),   (0,.5,0)]),
-        'right':CommandMessage( positions=[(0,-.025,0),  (0,-0.5,0)]),
+        #'back':CommandMessage(  positions=[(-0.05,0,0)]),
+        #'left':CommandMessage(  positions=[(0,.025,0),   (0,.5,0)]),
+        #'right':CommandMessage( positions=[(0,-.025,0),  (0,-0.5,0)]),
         
-        'reset': CommandMessage( positions = [(0,0,0,0,0),],method=None,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_RELATIVE_POSITION),
-        'five': CommandMessage( positions = [(5,5,5,5,5),(3,3,3,3,3)],method=None,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_RELATIVE_POSITION)
+        'reset': CommandMessage( positions = [(0,0,0,0,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'five': CommandMessage( positions = [(0,5,0,5,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        
+        'drive_neut': CommandMessage( positions = [(4,0,0,80,1),(4,-2,0,82,1),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        'drive_stop': CommandMessage( positions = [(4,-2,0,82,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        'drive_fwd': CommandMessage( positions = [(4,-2,0,76,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        'drive_back': CommandMessage( positions = [(4,-2,0,86,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),(-24, 12, 3, 38, 0)
+        
+        #  HAHA DISREGARD THAT I CANT PUT 3Lbs of FORCE
+        'light_down': CommandMessage( positions = [(-24, 21, 5, 31, 0), ],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+
         
         }
     cmdacceptor = CommandAcceptor(cmddict)
     return cmddict.keys()
     
+def currentposCallback(RLInfo):
+    global current_info
+    current_info = RLInfo.joint_angles
 def cmdCallback(string):
     print "Running Commmand: '%s'" % string.data
     cmdstr = string.data
@@ -297,7 +340,9 @@ if __name__ == '__main__':
     try:
         rospy.init_node('CommandAcceptor')
         keys = initialize()      
+        rospy.Subscriber("Robolink_Info", RobolinkInfo, currentposCallback)
         rospy.Subscriber("cmdacceptor", String, cmdCallback)
+        
         #rospy.Timer(rospy.Duration(0.1), publishDesiredPoseCallback)
         print "CommandAcceptor Initialized with commands: %s,stop" % ",".join(k for k in keys)
         rospy.spin()
@@ -307,3 +352,6 @@ if __name__ == '__main__':
     finally:
         pass
             #setAllVelocities(0,0,0,0,0)                 
+            
+            
+# wheel drive model no- RL-ZA001-0250-12PFN
