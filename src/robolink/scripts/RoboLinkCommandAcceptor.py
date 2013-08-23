@@ -59,7 +59,7 @@ def negate(l):
     return [-x for x in l]
 
 class CommandMessage(object):
-    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL):
+    def __init__(self, positions=[], timeinterval=[], timelength=0.5, reset=True, backsteps=[],startingstep=0, steps=[], controller=desiredPose, method="pose.", method_sub_map =METHOD_SUB_MAP_POS, control_mode=POSE_CONTROL, DRO=[], iterative_control=False):
         """ ARGS: 
         
             position:     List; of positions
@@ -87,6 +87,10 @@ class CommandMessage(object):
             # joint control
             CommandMessage(poslist,method=None, method_sub_map=METHOD_SUB_MAP_JOINTS, control_mode=JOINT_VELOCITY)
         """
+        # don't reset on = DRO
+        self.DRO = DRO
+        # iterative_control
+        self.iterative_control = iterative_control
         self.controller = controller
         self.control_mode = control_mode
         if self.control_mode == 4:
@@ -139,12 +143,22 @@ class CommandMessage(object):
                 tmp = []
                 tmp.extend([self.positions[x] for x in steps])
                 self.positions = tmp
+                
+        if backsteps:
+            self.backsteps = backsteps
+        else:
+            self.backsteps = None
         #
         if self.reset:
             self.initial = currentPose.current_position.position
             # if reversed, we need to reverse our positions and tack them onto themselves minus the last one.
-            self.backpositions = list(reversed([negate(x) for x in self.positions]))
+            #self.backpositions = list(reversed([negate(x) for x in self.positions]))
+            self.backpositions = list(reversed([x for x in self.positions]))
             self.backtimeintervals = list(reversed(self.timeinterval))
+            if self.backsteps:
+                tmppositions = [self.backpositions[x] for x in self.backsteps]
+                self.backpositions = tmppositions
+                
             
             self.fwdpositions = self.positions
             self.fwdtimeintervals = self.timeinterval
@@ -159,7 +173,10 @@ class CommandMessage(object):
         positions = ov_pos or self.positions
             
         for i in range(self.currentstep,len(positions)):
-            self.execstep(ov_pos=ov_pos,ov_time=ov_time)
+            if self.iterative_control:
+                self.execstep_i(ov_pos=ov_pos,ov_time=ov_time)
+            else:
+                self.execstep(ov_pos=ov_pos,ov_time=ov_time)
             self.currentstep += 1
         self.currentstep = self.startingstep
         
@@ -174,26 +191,26 @@ class CommandMessage(object):
         else:
             raise Exception("Can't just run back if not initialized w/ reset. What do you think we are?")
                 
-    #def execstep(self,step=None,ov_pos=None,ov_time=None):
-        ##other is a tuple composed of (positions,timeintervals)
-        #positions = ov_pos or self.positions
-        #timeintervals = ov_time or self.timeinterval
-        #thisstep = step or self.currentstep
-        #try:
-            #### TODO: IDEALLY here we actually do something with the arm. 
-            #now = rospy.Time.now()
-
-            #for i,j in zip(positions[thisstep],self.method_sub_map) :
-               #rec_setattr(self.controller,self.method+j,i)
-            ##print positions[thisstep],
-            ##print thisstep,
-            #print self.buildControlMsg()
-            #rospy.sleep(timeintervals[thisstep])
-            ##print self.controller
-            #self.controller.publish(self.buildControlMsg())
-        #except IndexError:
-            #print "Bad Step, Doesn't Exist"
     def execstep(self,step=None,ov_pos=None,ov_time=None):
+        #other is a tuple composed of (positions,timeintervals)
+        positions = ov_pos or self.positions
+        timeintervals = ov_time or self.timeinterval
+        thisstep = step or self.currentstep
+        try:
+            ### TODO: IDEALLY here we actually do something with the arm. 
+            now = rospy.Time.now()
+
+            for i,j in zip(positions[thisstep],self.method_sub_map) :
+               rec_setattr(self.controller,self.method+j,i)
+            #print positions[thisstep],
+            #print thisstep,
+            print self.buildControlMsg()
+            rospy.sleep(timeintervals[thisstep])
+            #print self.controller
+            self.controller.publish(self.buildControlMsg())
+        except IndexError:
+            print "Bad Step, Doesn't Exist"
+    def execstep_i(self,step=None,ov_pos=None,ov_time=None):
         positions = ov_pos or self.positions
         timeintervals = ov_time or self.timeinterval
         thisstep = step or self.currentstep
@@ -204,7 +221,7 @@ class CommandMessage(object):
             print current_info
             print positions[thisstep]
             for desired,method,current in zip(positions[thisstep],self.method_sub_map,current_info):
-                minimult = (desired-current)/20
+                minimult = (desired-current)/2
                 #print "mm: " + str(minimult)
                 if desired > current:
                     movement = 1 * MULT * (abs(minimult) +1 )
@@ -267,8 +284,14 @@ class CommandAcceptor(object):
         
     def run(self,cmd):
         if self.commanddict.has_key(cmd):
+            if self.currentcmd:
+                if self.currentcmd.reset:
+                    if cmd in  self.currentcmd.DRO:
+                        pass
+                    else:
+                        self.currentcmd.runback()
             self.currentcmd = self.commanddict[cmd]
-            if self.currentcmd.reset:
+	    if self.currentcmd.reset:
                 self.currentcmd.runfwd()
             else:
                 self.currentcmd.run()
@@ -305,13 +328,24 @@ def initialize():
         'reset': CommandMessage( positions = [(0,0,0,0,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
         #'five': CommandMessage( positions = [(0,5,0,5,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
         
-        'drive_neut': CommandMessage( positions = [(4,0,0,80,1),(4,-2,0,82,1),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
-        'drive_stop': CommandMessage( positions = [(4,-2,0,82,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
-        'drive_fwd': CommandMessage( positions = [(4,-2,0,76,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
-        'drive_back': CommandMessage( positions = [(4,-2,0,86,1)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),(-24, 12, 3, 38, 0)
+        #'drive_neut': CommandMessage( positions = [(4,0,0,80,1),(4,-2,0,82,1),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'drive_neut': CommandMessage( positions = [(-1,0,0,95,2),(-5,-3,1,94,2),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'drive_neut': CommandMessage( positions = [(-8,1,0,91,0),(-8,0,0,91,0),(-8,-1,0,90,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        
+        ### Eights
+        'drive_neut': CommandMessage( positions = [(-8,5,0,89,0),(-8,4,0,90,0),(-8,2,0,88,0),(-8,0,0,87,0),(-8,-1,0,85,0),],method=None,reset=True,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY,DRO=['drive_stop','drive_fwd','drive_back'],backsteps=[0,1,2],iterative_control=True),
+        'drive_stop': CommandMessage( positions = [(-8,0,0,87,0)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY,iterative_control=True),
+        'drive_fwd': CommandMessage( positions = [(-8,0,0,85,0)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY,iterative_control=True),
+        'drive_back': CommandMessage( positions = [(-8,-1,0,87,0),],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY,iterative_control=True)#,(-24, 12, 3, 38, 0)
+        
+        ### Sevens 
+        #'drive_neut': CommandMessage( positions = [(-5,5,0,89,0),(-5,4,0,90,0),(-5,2,0,88,0),(-5,0,0,87,0),],method=None,reset=True,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY,DRO=['drive_stop','drive_fwd','drive_back'],backsteps=[0,1,2]),
+        #'drive_stop': CommandMessage( positions = [(-5,0,0,87,0)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'drive_fwd': CommandMessage( positions = [(-5,-1,0,86,0)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'drive_back': CommandMessage( positions = [(-5,1,0,88,0)],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY)#,(-24, 12, 3, 38, 0)     
         
         #  HAHA DISREGARD THAT I CANT PUT 3Lbs of FORCE
-        'light_down': CommandMessage( positions = [(-24, 21, 5, 31, 0), ],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
+        #'light_down': CommandMessage( positions = [(-24, 21, 5, 31, 0), ],method=None,reset=False,method_sub_map=METHOD_SUB_MAP_JOINTS,control_mode=JOINT_VELOCITY),
 
         
         }
