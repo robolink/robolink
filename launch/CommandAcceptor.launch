@@ -1,0 +1,7 @@
+<launch>    
+		        
+        <node name="CommandAcceptor" pkg="robolink" type="RoboLinkCommandAcceptor.py" output="screen" >
+        
+        </node>
+        
+</launch>
